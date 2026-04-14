@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Railway Reservation - Book Ticket</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+  <header class="site-header">
+    <div class="header-inner">
+      <div class="logo">
+        <span class="logo-icon">🚆</span>
+        <span class="logo-text">RailReserve</span>
+      </div>
+      <nav>
+        <a href="/" class="nav-link active">Book Ticket</a>
+        <a href="/admin" class="nav-link">Admin Panel</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+
+    <!-- Hero -->
+    <section class="hero">
+      <h1 class="hero-title">Book Your Journey</h1>
+      <p class="hero-sub">Fast, simple railway reservations across India.</p>
+    </section>
+
+    <!-- Booking Form -->
+    <section class="card">
+      <h2 class="card-title">
+        <span class="card-icon">🎫</span> New Ticket Booking
+      </h2>
+
+      <form id="bookingForm">
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="full_name">Full Name</label>
+            <input type="text" id="full_name" placeholder="e.g. Rahul Sharma" required />
+          </div>
+          <div class="form-group">
+            <label for="email">Email Address</label>
+            <input type="email" id="email" placeholder="you@example.com" required />
+          </div>
+          <div class="form-group">
+            <label for="phone">Phone Number</label>
+            <input type="tel" id="phone" placeholder="10-digit mobile number" required />
+          </div>
+          <div class="form-group">
+            <label for="age">Age</label>
+            <input type="number" id="age" placeholder="e.g. 22" min="1" max="120" required />
+          </div>
+          <div class="form-group">
+            <label for="train_id">Select Train</label>
+            <select id="train_id" required>
+              <option value="">-- Loading trains... --</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="journey_date">Journey Date</label>
+            <input type="date" id="journey_date" required />
+          </div>
+        </div>
+
+        <div id="trainInfo" class="train-info-box hidden"></div>
+
+        <button type="submit" class="btn btn-primary">
+          Confirm Booking →
+        </button>
+      </form>
+
+      <div id="bookingMsg" class="message hidden"></div>
+    </section>
+
+    <!-- View Bookings -->
+    <section class="card">
+      <h2 class="card-title">
+        <span class="card-icon">📋</span> My Bookings
+      </h2>
+      <div class="search-row">
+        <input type="email" id="searchEmail" placeholder="Enter your email to view bookings..." />
+        <button class="btn btn-secondary" onclick="loadMyBookings()">Search</button>
+      </div>
+
+      <div id="bookingsTable" class="table-wrap hidden">
+        <table>
+          <thead>
+            <tr>
+              <th>Ticket #</th>
+              <th>Train</th>
+              <th>From → To</th>
+              <th>Journey Date</th>
+              <th>Seat</th>
+              <th>Fare</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="bookingsTbody"></tbody>
+        </table>
+      </div>
+      <div id="bookingsMsg" class="message hidden"></div>
+    </section>
+
+  </main>
+
+  <footer class="site-footer">
+    <p>SPPU DBMS Mini Project &mdash; Railway Reservation System &copy; 2025</p>
+  </footer>
+
+  <script>
+    // Set minimum date to today
+    document.getElementById('journey_date').min = new Date().toISOString().split('T')[0];
+
+    // Load trains into <select> on page load
+    async function loadTrains() {
+      const res = await fetch('/api/trains');
+      const trains = await res.json();
+      const sel = document.getElementById('train_id');
+      sel.innerHTML = '<option value="">-- Select a Train --</option>';
+      trains.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t.train_id;
+        opt.textContent = `${t.train_number} | ${t.train_name} | ${t.source} → ${t.destination}`;
+        opt.dataset.fare = t.fare;
+        opt.dataset.seats = t.available_seats;
+        opt.dataset.dep = t.departure_time;
+        opt.dataset.arr = t.arrival_time;
+        sel.appendChild(opt);
+      });
+    }
+
+    // Show train info when a train is selected
+    document.getElementById('train_id').addEventListener('change', function () {
+      const selected = this.options[this.selectedIndex];
+      const box = document.getElementById('trainInfo');
+      if (!selected.value) { box.classList.add('hidden'); return; }
+      box.classList.remove('hidden');
+      box.innerHTML = `
+        <span>🕐 Departs: <strong>${selected.dataset.dep}</strong></span>
+        <span>🕔 Arrives: <strong>${selected.dataset.arr}</strong></span>
+        <span>💺 Seats Left: <strong>${selected.dataset.seats}</strong></span>
+        <span>💰 Fare: <strong>₹${selected.dataset.fare}</strong></span>
+      `;
+    });
+
+    // Handle booking form submit
+    document.getElementById('bookingForm').addEventListener('submit', async function (e) {
+      e.preventDefault();
+      const msgEl = document.getElementById('bookingMsg');
+      msgEl.className = 'message hidden';
+
+      const payload = {
+        full_name:    document.getElementById('full_name').value,
+        email:        document.getElementById('email').value,
+        phone:        document.getElementById('phone').value,
+        age:          parseInt(document.getElementById('age').value),
+        train_id:     parseInt(document.getElementById('train_id').value),
+        journey_date: document.getElementById('journey_date').value,
+      };
+
+      const res = await fetch('/api/book', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        msgEl.className = 'message success';
+        msgEl.textContent = `✅ ${data.message} (Ticket ID: #${data.ticket_id})`;
+        this.reset();
+        document.getElementById('trainInfo').classList.add('hidden');
+        loadTrains(); // Refresh seat counts
+      } else {
+        msgEl.className = 'message error';
+        msgEl.textContent = `❌ ${data.detail}`;
+      }
+      msgEl.classList.remove('hidden');
+    });
+
+    // Load bookings by email
+    async function loadMyBookings() {
+      const email = document.getElementById('searchEmail').value.trim();
+      const msgEl = document.getElementById('bookingsMsg');
+      const tableEl = document.getElementById('bookingsTable');
+      if (!email) { alert('Please enter your email.'); return; }
+
+      msgEl.classList.add('hidden');
+      tableEl.classList.add('hidden');
+
+      const res = await fetch(`/api/bookings?email=${encodeURIComponent(email)}`);
+      const data = await res.json();
+
+      if (!res.ok) {
+        msgEl.className = 'message error'; msgEl.textContent = data.detail;
+        msgEl.classList.remove('hidden'); return;
+      }
+
+      if (data.length === 0) {
+        msgEl.className = 'message info'; msgEl.textContent = 'No bookings found for this email.';
+        msgEl.classList.remove('hidden'); return;
+      }
+
+      const tbody = document.getElementById('bookingsTbody');
+      tbody.innerHTML = '';
+      data.forEach(b => {
+        const tr = document.createElement('tr');
+        const statusClass = b.status === 'Confirmed' ? 'badge-confirmed' : 'badge-cancelled';
+        tr.innerHTML = `
+          <td><strong>#${b.ticket_id}</strong></td>
+          <td>${b.train_number}<br/><small>${b.train_name}</small></td>
+          <td>${b.source} → ${b.destination}</td>
+          <td>${b.journey_date}</td>
+          <td>${b.seat_number}</td>
+          <td>₹${b.fare}</td>
+          <td><span class="badge ${statusClass}">${b.status}</span></td>
+        `;
+        tbody.appendChild(tr);
+      });
+      tableEl.classList.remove('hidden');
+    }
+
+    loadTrains();
+  </script>
+</body>
+</html>
